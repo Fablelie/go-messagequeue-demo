@@ -1,0 +1,58 @@
+services:
+  # =========================================================================
+  # RabbitMQ Service
+  # =========================================================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: demo-rabbitmq
+    ports:
+      - "5672:5672"   # พอร์ตหลักสำหรับให้แอป Golang เชื่อมต่อ (AMQP Protocol)
+      - "15672:15672" # พอร์ตสำหรับหน้าเว็บ Management UI 
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  # =========================================================================
+  # Kafka Service (KRaft Mode - No Zookeeper)
+  # =========================================================================
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: demo-kafka
+    ports:
+      - "9092:9092"   # พอร์ตหลักสำหรับให้แอป Golang เชื่อมต่อ (PLAINTEXT)
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9092'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      # เผื่อสุ่ม Cluster ID สำหรับเปิดใช้งานโหมด KRaft
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk' 
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  app:
+    build: .                 # สั่งประกอบอิมเมจจากไฟล์ Dockerfile ที่อยู่ที่จุดนี้
+    container_name: demo-go-app
+    ports:
+      - "8080:8080"          # แมปพอร์ตใช้งานจากหน้าเว็บเข้าสู่คอมพิวเตอร์หลัก
+    environment:
+      # จุดสำคัญ: แนะนำให้ปรับตัวแปรการต่อเชื่อมในไฟล์ระบบ Go ของคุณจากเดิมที่ระบุ localhost 
+      # เปลี่ยนมาเป็นชื่อบริการของด็อกเกอร์นั้นๆ แทน (เช่น "rabbitmq:5672" และ "kafka:9092")
+      # เพื่อให้กล่องแต่ละใบสามารถวิ่งหาเส้นทางระบบเครือข่ายภายในคอนเทนเนอร์ร่วมกันได้ถูกต้องครับ
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - KAFKA_BROKERS=kafka:9092
+    depends_on:
+      - rabbitmq
+      - kafka
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+  kafka_data:

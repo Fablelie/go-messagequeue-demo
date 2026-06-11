@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MQ Playground - ดูระบบ Group Routing</title>
+    <script src="https://jsdelivr.net"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-8 font-sans" onload="updateQueues()">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-2 text-center text-teal-400">📊 MQ Playground: ระบบ Group Routing</h1>
+        <p class="text-center text-gray-400 mb-8">จำลองการส่งข้อมูลเจาะจงกลุ่มเป้าหมาย และการกรองข้อมูลของ Consumer</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <!-- 🟠 ฝั่ง RABBITMQ (คงเดิมไว้เพื่อเปรียบเทียบ) -->
+            <div class="bg-gray-800 p-6 rounded-xl border-2 border-orange-500/40 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-orange-400 mb-2">🐇 1. RabbitMQ (Queue)</h2>
+                    <p class="text-xs text-gray-400 mb-4">พฤติกรรม: งานเข้าคิว -> ถูกดึงไปทำ -> งานชิ้นนั้นหายจากคิวทันที</p>
+                    
+                    <div class="flex gap-2 mb-6">
+                        <input id="rabbitInput" type="text" value="งานชิ้นใหม่" class="bg-gray-700 px-3 py-2 rounded flex-1 outline-none">
+                        <button onclick="sendRabbit()" class="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded font-bold text-sm text-black">ส่งเข้าคิว</button>
+                    </div>
+
+                    <div class="bg-amber-950/40 border border-amber-500/30 p-4 rounded-lg mb-6">
+                        <div class="font-bold text-amber-400 text-sm mb-2 flex justify-between">
+                            <span>📦 กล่องคิวในระบบ (RabbitMQ)</span>
+                            <span id="rabbit-count" class="bg-amber-500 text-black px-2 py-0.5 rounded text-xs font-black">0 ชิ้น</span>
+                        </div>
+                        <div id="rabbit-queue-list" class="text-xs font-mono text-gray-400 space-y-1 max-h-24 overflow-y-auto">ไม่มีงานค้าง</div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 flex justify-between items-center">
+                        <div>
+                            <div class="font-bold text-amber-300 text-sm">👨‍💻 Worker-A</div>
+                            <div id="rabbit-Worker-A" class="text-xs font-mono text-gray-400 mt-1">ยังไม่มีงาน</div>
+                        </div>
+                        <button onclick="fetchData('rabbit', 'Worker-A')" class="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold px-3 py-2 rounded">ดึงงาน</button>
+                    </div>
+                    <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 flex justify-between items-center">
+                        <div>
+                            <div class="font-bold text-amber-300 text-sm">👨‍💻 Worker-B</div>
+                            <div id="rabbit-Worker-B" class="text-xs font-mono text-gray-400 mt-1">ยังไม่มีงาน</div>
+                        </div>
+                        <button onclick="fetchData('rabbit', 'Worker-B')" class="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold px-3 py-2 rounded">ดึงงาน</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔵 ฝั่ง KAFKA (เพิ่มระบบส่งเจาะจงกลุ่ม) -->
+            <div class="bg-gray-800 p-6 rounded-xl border-2 border-sky-500/40 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-sky-400 mb-2">🪰 2. Apache Kafka (Log Group)</h2>
+                    <p class="text-xs text-gray-400 mb-4">พฤติกรรม: บันทึกเหตุการณ์ลงสมุดกลาง แต่ละกลุ่มจะเลือกอ่านเฉพาะที่เป็นของตัวเอง</p>
+                    
+                    <div class="flex flex-col gap-2 mb-6 bg-gray-900/50 p-3 rounded-lg border border-gray-700">
+                        <div class="text-xs font-bold text-sky-300">สร้างเหตุการณ์ใหม่:</div>
+                        <input id="kafkaInput" type="text" value="ข้อมูลรายงานยอดขายประจำวัน" class="bg-gray-700 px-3 py-1.5 rounded outline-none text-sm">
+                        
+                        <div class="flex gap-2 items-center justify-between mt-1">
+                            <div class="flex items-center gap-1.5 text-xs text-gray-300">
+                                <span>🎯 ส่งให้กลุ่ม:</span>
+                                <select id="kafkaGroupSelect" class="bg-gray-700 border border-gray-600 text-white text-xs rounded px-2 py-1">
+                                    <option value="analytics">📊 analytics</option>
+                                    <option value="email">✉️ email</option>
+                                </select>
+                            </div>
+                            <button onclick="sendKafka()" class="bg-sky-500 hover:bg-sky-600 px-4 py-1.5 rounded font-bold text-xs text-black">บันทึก Event</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-sky-950/40 border border-sky-500/30 p-4 rounded-lg mb-6">
+                        <div class="font-bold text-sky-400 text-sm mb-2 flex justify-between">
+                            <span>📜 สมุดบันทึกระบบ (Kafka Log)</span>
+                            <span id="kafka-count" class="bg-sky-500 text-black px-2 py-0.5 rounded text-xs font-black">0 ข้อความ</span>
+                        </div>
+                        <div id="kafka-queue-list" class="text-xs font-mono text-gray-400 space-y-1 max-h-24 overflow-y-auto">สมุดบันทึกยังว่าง</div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 flex justify-between items-center">
+                        <div>
+                            <div class="font-bold text-purple-300 text-sm">📊 แผนกวิเคราะห์ (Analytics)</div>
+                            <div id="kafka-analytics" class="text-xs font-mono text-gray-400 mt-1">ยังไม่ได้อ่าน</div>
+                        </div>
+                        <button onclick="fetchData('kafka', 'analytics')" class="bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold px-3 py-2 rounded">อ่านข้อความถัดไป</button>
+                    </div>
+                    <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 flex justify-between items-center">
+                        <div>
+                            <div class="font-bold text-pink-300 text-sm">✉️ แผนกส่งอีเมล (Email-Service)</div>
+                            <div id="kafka-email" class="text-xs font-mono text-gray-400 mt-1">ยังไม่ได้อ่าน</div>
+                        </div>
+                        <button onclick="fetchData('kafka', 'email')" class="bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold px-3 py-2 rounded">อ่านข้อความถัดไป</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        async function updateQueues() {
+            const res = await fetch('/api/queues-status');
+            const data = await res.json();
+            
+            document.getElementById('rabbit-count').innerText = `${data.rabbit_queue.length} ชิ้น`;
+            const rabbitList = document.getElementById('rabbit-queue-list');
+            rabbitList.innerHTML = data.rabbit_queue.length > 0 
+                ? data.rabbit_queue.map((m, i) => `<div class="bg-gray-900/60 p-1 rounded border-l-2 border-orange-500">📄 [ลำดับที่ ${i+1}] ${m}</div>`).join('')
+                : 'ไม่มีงานค้าง';
+
+            document.getElementById('kafka-count').innerText = `${data.kafka_log.length} ข้อความ`;
+            const kafkaList = document.getElementById('kafka-queue-list');
+            kafkaList.innerHTML = data.kafka_log.length > 0 
+                ? data.kafka_log.map(m => `<div class="bg-gray-900/60 p-1 rounded border-l-2 border-sky-500">🆔 (Offset: ${m.offset}) <span class="text-yellow-400 font-bold">[ถึง: ${m.target_group}]</span> ${m.value}</div>`).join('')
+                : 'สมุดบันทึกยังว่าง';
+        }
+
+        async function sendRabbit() {
+            const input = document.getElementById('rabbitInput');
+            let formData = new FormData();
+            formData.append('message', input.value);
+            await fetch('/api/send-rabbit', { method: 'POST', body: formData });
+            input.value = 'งานชิ้นใหม่';
+            await updateQueues();
+        }
+
+        async function sendKafka() {
+            const input = document.getElementById('kafkaInput');
+            const groupSelect = document.getElementById('kafkaGroupSelect');
+            let formData = new FormData();
+            formData.append('message', input.value);
+            formData.append('target_group', groupSelect.value); // ส่งชื่อกรุ๊ปเป้าหมายไปด้วย
+            await fetch('/api/send-kafka', { method: 'POST', body: formData });
+            input.value = 'ข้อความใหม่';
+            await updateQueues();
+        }
+
+        async function fetchData(type, target) {
+            const res = await fetch(`/api/get-${type}?target=${target}`);
+            const data = await res.json();
+            const display = document.getElementById(`${type}-${target}`);
+            if(data.message) {
+                display.innerHTML = `<span class="text-emerald-400 font-bold">▶ ล่าสุด: ${data.message}</span>`;
+            } else {
+                display.innerHTML = `<span class="text-red-400">❌ ไม่ใช่ข้อความของกลุ่มนี้ / ไม่มีข้อมูลใหม่</span>`;
+            }
+            await updateQueues();
+        }
+    </script>
+</body>
+</html>
